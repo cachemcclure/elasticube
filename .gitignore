@@ -1,0 +1,37 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python (for future bindings)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+ENV/
+.venv/
+
+# Build artifacts
+*.so
+*.dylib
+*.dll
+*.a
+
+# Documentation
+/target/doc/
+
+# Test artifacts
+/target/debug/
+/target/release/

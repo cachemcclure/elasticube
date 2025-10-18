@@ -1,0 +1,16 @@
+region,product,category,sales,quantity,year,quarter
+North,Widget,Electronics,1000.0,100,2024,1
+South,Widget,Electronics,1500.0,150,2024,1
+North,Gadget,Hardware,800.0,80,2024,1
+East,Widget,Electronics,1200.0,120,2024,1
+South,Gadget,Hardware,950.0,95,2024,2
+West,Widget,Electronics,1100.0,110,2024,2
+North,Gadget,Hardware,750.0,75,2024,2
+East,Gadget,Hardware,900.0,90,2024,2
+South,Widget,Electronics,1350.0,135,2024,3
+West,Gadget,Hardware,850.0,85,2024,3
+North,Widget,Electronics,1050.0,105,2024,3
+South,Gadget,Hardware,1000.0,100,2024,3
+East,Widget,Electronics,1150.0,115,2024,4
+West,Gadget,Hardware,920.0,92,2024,4
+North,Gadget,Hardware,780.0,78,2024,4

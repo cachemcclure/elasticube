@@ -1,0 +1,29 @@
+[package]
+name = "elasticube-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cachemcclure/elasticube"
+description = "High-performance OLAP cube builder and query library"
+keywords = ["olap", "analytics", "cube", "arrow", "datafusion"]
+categories = ["database", "data-structures"]
+
+[dependencies]
+arrow = { version = "56", features = ["ipc"] }
+arrow-array = "56"
+arrow-schema = { version = "56", features = ["serde"] }
+arrow-csv = "56"
+arrow-json = "56"
+datafusion = "50"
+parquet = "56"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+tokio = { version = "1", features = ["full"] }
+indexmap = { version = "2.0", features = ["serde"] }
+num_cpus = "1.16"
+lru = "0.12"
+
+[dev-dependencies]
+tokio-test = "0.4"
