@@ -29,16 +29,16 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+dependencies = [
+    "pyarrow>=14.0.0",
+    "pandas>=2.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/cachemcclure/elasticube"
 Repository = "https://github.com/cachemcclure/elasticube"
 Issues = "https://github.com/cachemcclure/elasticube/issues"
 Documentation = "https://github.com/cachemcclure/elasticube/tree/main/elasticube-py"
-dependencies = [
-    "pyarrow>=14.0.0",
-    "pandas>=2.0.0",
-]
 
 [project.optional-dependencies]
 dev = [
