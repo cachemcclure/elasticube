@@ -7,7 +7,7 @@ leveraging Apache Arrow and DataFusion for maximum performance.
 Example:
     >>> from elasticube import ElastiCubeBuilder
     >>>
-    >>> builder = ElastiCubeBuilder()
+    >>> builder = ElastiCubeBuilder("my_cube")
     >>> builder.add_dimension("region", "string")
     >>> builder.add_measure("sales", "float64", "sum")
     >>> builder.load_csv("data.csv")
@@ -27,5 +27,25 @@ from ._elasticube import (
     PyQueryBuilder as QueryBuilder,
 )
 
+# Add visualization support
+from .viz import add_viz_methods, CubeVisualizer
+from .display import add_jupyter_repr, add_querybuilder_repr, enable_jupyter_integration
+from .serialization import add_serialization_methods, CubeSerializer
+
+# Enhance classes with Jupyter display and visualization support
+add_jupyter_repr(ElastiCube)
+add_querybuilder_repr(QueryBuilder)
+add_viz_methods(QueryBuilder)
+add_serialization_methods(ElastiCube)
+
+# Enable Jupyter integration if available
+_jupyter_enabled = enable_jupyter_integration()
+
 __version__ = "0.1.0"
-__all__ = ["ElastiCubeBuilder", "ElastiCube", "QueryBuilder"]
+__all__ = [
+    "ElastiCubeBuilder",
+    "ElastiCube",
+    "QueryBuilder",
+    "CubeVisualizer",
+    "CubeSerializer",
+]

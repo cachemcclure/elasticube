@@ -353,35 +353,97 @@ impl QueryBuilder {
             .map_err(|e| Error::query(format!("SQL execution failed: {}", e)))
     }
 
+    /// Expand calculated fields in an expression
+    ///
+    /// Replaces references to calculated measures and virtual dimensions
+    /// with their underlying expressions. Performs recursive expansion
+    /// to handle nested calculated fields.
+    fn expand_calculated_fields(&self, expr: &str) -> String {
+        let mut expanded = expr.to_string();
+        let schema = self.cube.schema();
+
+        // Keep expanding until no more changes occur (handles nested calculated fields)
+        // Use a maximum iteration count to prevent infinite loops
+        const MAX_ITERATIONS: usize = 10;
+        for _ in 0..MAX_ITERATIONS {
+            let before = expanded.clone();
+
+            // Expand virtual dimensions first (they can be used in calculated measures)
+            for vdim in schema.virtual_dimensions() {
+                let pattern = vdim.name();
+                // Use word boundaries to avoid partial matches
+                // e.g., don't replace "year" in "yearly_sales"
+                let regex_pattern = format!(r"\b{}\b", regex::escape(pattern));
+                if let Ok(re) = regex::Regex::new(&regex_pattern) {
+                    let replacement = format!("({})", vdim.expression());
+                    expanded = re.replace_all(&expanded, replacement.as_str()).to_string();
+                }
+            }
+
+            // Expand calculated measures
+            for calc_measure in schema.calculated_measures() {
+                let pattern = calc_measure.name();
+                let regex_pattern = format!(r"\b{}\b", regex::escape(pattern));
+                if let Ok(re) = regex::Regex::new(&regex_pattern) {
+                    let replacement = format!("({})", calc_measure.expression());
+                    expanded = re.replace_all(&expanded, replacement.as_str()).to_string();
+                }
+            }
+
+            // If no changes were made, we're done
+            if expanded == before {
+                break;
+            }
+        }
+
+        expanded
+    }
+
     /// Build SQL query string from fluent API parameters
     fn build_sql_query(&self) -> String {
         let mut query_str = String::from("SELECT ");
 
-        // SELECT clause
+        // SELECT clause - expand calculated fields
         if self.select_exprs.is_empty() {
             query_str.push('*');
         } else {
-            query_str.push_str(&self.select_exprs.join(", "));
+            let expanded_selects: Vec<String> = self
+                .select_exprs
+                .iter()
+                .map(|expr| self.expand_calculated_fields(expr))
+                .collect();
+            query_str.push_str(&expanded_selects.join(", "));
         }
 
         query_str.push_str(" FROM cube");
 
-        // WHERE clause
+        // WHERE clause - expand calculated fields
         if let Some(filter) = &self.filter_expr {
             query_str.push_str(" WHERE ");
-            query_str.push_str(filter);
+            let expanded_filter = self.expand_calculated_fields(filter);
+            query_str.push_str(&expanded_filter);
         }
 
-        // GROUP BY clause
+        // GROUP BY clause - expand calculated fields
         if !self.group_by_exprs.is_empty() {
             query_str.push_str(" GROUP BY ");
-            query_str.push_str(&self.group_by_exprs.join(", "));
+            let expanded_groups: Vec<String> = self
+                .group_by_exprs
+                .iter()
+                .map(|expr| self.expand_calculated_fields(expr))
+                .collect();
+            query_str.push_str(&expanded_groups.join(", "));
         }
 
-        // ORDER BY clause
+        // ORDER BY clause - expand calculated fields
         if !self.order_by_exprs.is_empty() {
             query_str.push_str(" ORDER BY ");
-            query_str.push_str(&self.order_by_exprs.join(", "));
+            let expanded_orders: Vec<String> = self
+                .order_by_exprs
+                .iter()
+                .map(|expr| self.expand_calculated_fields(expr))
+                .collect();
+            query_str.push_str(&expanded_orders.join(", "));
         }
 
         // LIMIT clause

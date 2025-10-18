@@ -1,6 +1,6 @@
 //! Schema metadata for ElastiCube
 
-use super::{Dimension, Hierarchy, Measure};
+use super::{CalculatedMeasure, Dimension, Hierarchy, Measure, VirtualDimension};
 use crate::error::{Error, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,12 @@ pub struct CubeSchema {
     /// Hierarchies indexed by name for fast lookup
     hierarchies: IndexMap<String, Hierarchy>,
 
+    /// Calculated measures (derived from expressions)
+    calculated_measures: IndexMap<String, CalculatedMeasure>,
+
+    /// Virtual dimensions (computed dimensions)
+    virtual_dimensions: IndexMap<String, VirtualDimension>,
+
     /// Optional description
     description: Option<String>,
 }
@@ -35,6 +41,8 @@ impl CubeSchema {
             dimensions: IndexMap::new(),
             measures: IndexMap::new(),
             hierarchies: IndexMap::new(),
+            calculated_measures: IndexMap::new(),
+            virtual_dimensions: IndexMap::new(),
             description: None,
         }
     }
@@ -224,6 +232,104 @@ impl CubeSchema {
         self.hierarchies.keys().map(|s| s.as_str()).collect()
     }
 
+    /// Add a calculated measure to the schema
+    pub fn add_calculated_measure(&mut self, calc_measure: CalculatedMeasure) -> Result<()> {
+        let name = calc_measure.name().to_string();
+
+        // Check for name conflicts with regular measures and calculated measures
+        if self.measures.contains_key(&name) {
+            return Err(Error::measure(format!(
+                "A measure named '{}' already exists",
+                name
+            )));
+        }
+        if self.calculated_measures.contains_key(&name) {
+            return Err(Error::measure(format!(
+                "Calculated measure '{}' already exists",
+                name
+            )));
+        }
+
+        self.calculated_measures.insert(name, calc_measure);
+        Ok(())
+    }
+
+    /// Add a virtual dimension to the schema
+    pub fn add_virtual_dimension(&mut self, virtual_dim: VirtualDimension) -> Result<()> {
+        let name = virtual_dim.name().to_string();
+
+        // Check for name conflicts with regular dimensions and virtual dimensions
+        if self.dimensions.contains_key(&name) {
+            return Err(Error::dimension(format!(
+                "A dimension named '{}' already exists",
+                name
+            )));
+        }
+        if self.virtual_dimensions.contains_key(&name) {
+            return Err(Error::dimension(format!(
+                "Virtual dimension '{}' already exists",
+                name
+            )));
+        }
+
+        self.virtual_dimensions.insert(name, virtual_dim);
+        Ok(())
+    }
+
+    /// Get all calculated measures
+    pub fn calculated_measures(&self) -> Vec<&CalculatedMeasure> {
+        self.calculated_measures.values().collect()
+    }
+
+    /// Get all virtual dimensions
+    pub fn virtual_dimensions(&self) -> Vec<&VirtualDimension> {
+        self.virtual_dimensions.values().collect()
+    }
+
+    /// Get a calculated measure by name
+    pub fn get_calculated_measure(&self, name: &str) -> Option<&CalculatedMeasure> {
+        self.calculated_measures.get(name)
+    }
+
+    /// Get a virtual dimension by name
+    pub fn get_virtual_dimension(&self, name: &str) -> Option<&VirtualDimension> {
+        self.virtual_dimensions.get(name)
+    }
+
+    /// Remove a calculated measure
+    pub fn remove_calculated_measure(&mut self, name: &str) -> Result<CalculatedMeasure> {
+        self.calculated_measures.shift_remove(name).ok_or_else(|| {
+            Error::measure(format!("Calculated measure '{}' not found", name))
+        })
+    }
+
+    /// Remove a virtual dimension
+    pub fn remove_virtual_dimension(&mut self, name: &str) -> Result<VirtualDimension> {
+        self.virtual_dimensions.shift_remove(name).ok_or_else(|| {
+            Error::dimension(format!("Virtual dimension '{}' not found", name))
+        })
+    }
+
+    /// Check if a calculated measure exists
+    pub fn has_calculated_measure(&self, name: &str) -> bool {
+        self.calculated_measures.contains_key(name)
+    }
+
+    /// Check if a virtual dimension exists
+    pub fn has_virtual_dimension(&self, name: &str) -> bool {
+        self.virtual_dimensions.contains_key(name)
+    }
+
+    /// Get the number of calculated measures
+    pub fn calculated_measure_count(&self) -> usize {
+        self.calculated_measures.len()
+    }
+
+    /// Get the number of virtual dimensions
+    pub fn virtual_dimension_count(&self) -> usize {
+        self.virtual_dimensions.len()
+    }
+
     /// Convert CubeSchema to Arrow Schema
     ///
     /// Creates an Arrow schema containing fields for all dimensions and measures.
@@ -351,5 +457,141 @@ mod tests {
 
         // Now should succeed
         assert!(schema.remove_dimension("year").is_ok());
+    }
+
+    #[test]
+    fn test_add_calculated_measure() {
+        use super::CalculatedMeasure;
+
+        let mut schema = CubeSchema::new("test");
+
+        // Add base measures first
+        schema
+            .add_measure(Measure::new("revenue", DataType::Float64, AggFunc::Sum))
+            .unwrap();
+        schema
+            .add_measure(Measure::new("cost", DataType::Float64, AggFunc::Sum))
+            .unwrap();
+
+        // Add calculated measure
+        let profit = CalculatedMeasure::new(
+            "profit",
+            "revenue - cost",
+            DataType::Float64,
+            AggFunc::Sum,
+        )
+        .unwrap();
+
+        assert!(schema.add_calculated_measure(profit).is_ok());
+        assert_eq!(schema.calculated_measure_count(), 1);
+        assert!(schema.has_calculated_measure("profit"));
+
+        // Test duplicate
+        let profit2 = CalculatedMeasure::new(
+            "profit",
+            "revenue - cost",
+            DataType::Float64,
+            AggFunc::Sum,
+        )
+        .unwrap();
+        assert!(schema.add_calculated_measure(profit2).is_err());
+    }
+
+    #[test]
+    fn test_add_virtual_dimension() {
+        use super::VirtualDimension;
+
+        let mut schema = CubeSchema::new("test");
+
+        // Add base dimension
+        schema
+            .add_dimension(Dimension::new("sale_date", DataType::Date32))
+            .unwrap();
+
+        // Add virtual dimension
+        let year = VirtualDimension::new(
+            "year",
+            "EXTRACT(YEAR FROM sale_date)",
+            DataType::Int32,
+        )
+        .unwrap();
+
+        assert!(schema.add_virtual_dimension(year).is_ok());
+        assert_eq!(schema.virtual_dimension_count(), 1);
+        assert!(schema.has_virtual_dimension("year"));
+
+        // Test duplicate
+        let year2 =
+            VirtualDimension::new("year", "EXTRACT(YEAR FROM sale_date)", DataType::Int32)
+                .unwrap();
+        assert!(schema.add_virtual_dimension(year2).is_err());
+    }
+
+    #[test]
+    fn test_calculated_measure_name_conflict() {
+        use super::CalculatedMeasure;
+
+        let mut schema = CubeSchema::new("test");
+
+        // Add a regular measure
+        schema
+            .add_measure(Measure::new("sales", DataType::Float64, AggFunc::Sum))
+            .unwrap();
+
+        // Try to add calculated measure with same name - should fail
+        let calc_sales =
+            CalculatedMeasure::new("sales", "revenue * 0.8", DataType::Float64, AggFunc::Sum)
+                .unwrap();
+        assert!(schema.add_calculated_measure(calc_sales).is_err());
+    }
+
+    #[test]
+    fn test_virtual_dimension_name_conflict() {
+        use super::VirtualDimension;
+
+        let mut schema = CubeSchema::new("test");
+
+        // Add a regular dimension
+        schema
+            .add_dimension(Dimension::new("region", DataType::Utf8))
+            .unwrap();
+
+        // Try to add virtual dimension with same name - should fail
+        let virtual_region =
+            VirtualDimension::new("region", "UPPER(region)", DataType::Utf8).unwrap();
+        assert!(schema.add_virtual_dimension(virtual_region).is_err());
+    }
+
+    #[test]
+    fn test_get_calculated_measure() {
+        use super::CalculatedMeasure;
+
+        let mut schema = CubeSchema::new("test");
+
+        let margin =
+            CalculatedMeasure::new("margin", "profit / revenue", DataType::Float64, AggFunc::Avg)
+                .unwrap();
+        schema.add_calculated_measure(margin).unwrap();
+
+        let retrieved = schema.get_calculated_measure("margin").unwrap();
+        assert_eq!(retrieved.name(), "margin");
+        assert_eq!(retrieved.expression(), "profit / revenue");
+    }
+
+    #[test]
+    fn test_remove_calculated_measure() {
+        use super::CalculatedMeasure;
+
+        let mut schema = CubeSchema::new("test");
+
+        let calc = CalculatedMeasure::new("test", "a + b", DataType::Float64, AggFunc::Sum)
+            .unwrap();
+        schema.add_calculated_measure(calc).unwrap();
+
+        assert!(schema.remove_calculated_measure("test").is_ok());
+        assert_eq!(schema.calculated_measure_count(), 0);
+
+        // Try to remove again - should fail
+        assert!(schema.remove_calculated_measure("test").is_err());
     }
 }

@@ -41,10 +41,19 @@ pub mod query;
 pub mod storage;
 pub mod sources;
 
+#[cfg(test)]
+mod query_materialization_tests;
+
+#[cfg(test)]
+mod cube_update_tests;
+
 // Re-export commonly used types
 pub use builder::ElastiCubeBuilder;
 pub use cache::{CacheStats, QueryCache, QueryCacheKey};
-pub use cube::{AggFunc, CubeSchema, Dimension, ElastiCube, Hierarchy, Measure};
+pub use cube::{
+    AggFunc, CalculatedMeasure, CubeSchema, Dimension, ElastiCube, Hierarchy, Measure,
+    VirtualDimension,
+};
 pub use error::{Error, Result};
 pub use optimization::{ColumnStatistics, CubeStatistics, OptimizationConfig};
 pub use query::{QueryBuilder, QueryResult};

@@ -1,6 +1,9 @@
 //! ElastiCube builder for constructing cubes
 
-use crate::cube::{AggFunc, CubeSchema, Dimension, ElastiCube, Hierarchy, Measure};
+use crate::cube::{
+    AggFunc, CalculatedMeasure, CubeSchema, Dimension, ElastiCube, Hierarchy, Measure,
+    VirtualDimension,
+};
 use crate::error::{Error, Result};
 use crate::sources::{CsvSource, DataSource, JsonSource, ParquetSource, RecordBatchSource};
 use arrow::datatypes::{DataType, Schema as ArrowSchema};
@@ -57,6 +60,68 @@ impl ElastiCubeBuilder {
     ) -> Result<Self> {
         let hierarchy = Hierarchy::new(name, levels);
         self.schema.add_hierarchy(hierarchy)?;
+        Ok(self)
+    }
+
+    /// Add a calculated measure (derived from an expression)
+    ///
+    /// # Arguments
+    /// * `name` - Name for the calculated measure
+    /// * `expression` - SQL expression (e.g., "revenue - cost")
+    /// * `data_type` - Expected result data type
+    /// * `agg_func` - Default aggregation function
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let cube = ElastiCubeBuilder::new("sales")
+    ///     .add_measure("revenue", DataType::Float64, AggFunc::Sum)?
+    ///     .add_measure("cost", DataType::Float64, AggFunc::Sum)?
+    ///     .add_calculated_measure(
+    ///         "profit",
+    ///         "revenue - cost",
+    ///         DataType::Float64,
+    ///         AggFunc::Sum
+    ///     )?
+    ///     .build()?;
+    /// ```
+    pub fn add_calculated_measure(
+        mut self,
+        name: impl Into<String>,
+        expression: impl Into<String>,
+        data_type: DataType,
+        agg_func: AggFunc,
+    ) -> Result<Self> {
+        let calc_measure = CalculatedMeasure::new(name, expression, data_type, agg_func)?;
+        self.schema.add_calculated_measure(calc_measure)?;
+        Ok(self)
+    }
+
+    /// Add a virtual dimension (computed dimension)
+    ///
+    /// # Arguments
+    /// * `name` - Name for the virtual dimension
+    /// * `expression` - SQL expression (e.g., "EXTRACT(YEAR FROM date)")
+    /// * `data_type` - Expected result data type
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let cube = ElastiCubeBuilder::new("sales")
+    ///     .add_dimension("sale_date", DataType::Date32)?
+    ///     .add_virtual_dimension(
+    ///         "year",
+    ///         "EXTRACT(YEAR FROM sale_date)",
+    ///         DataType::Int32
+    ///     )?
+    ///     .build()?;
+    /// ```
+    pub fn add_virtual_dimension(
+        mut self,
+        name: impl Into<String>,
+        expression: impl Into<String>,
+        data_type: DataType,
+    ) -> Result<Self> {
+        let virtual_dim = VirtualDimension::new(name, expression, data_type)?;
+        self.schema.add_virtual_dimension(virtual_dim)?;
         Ok(self)
     }
 
@@ -144,6 +209,31 @@ impl ElastiCubeBuilder {
         schema: Arc<ArrowSchema>,
         batches: Vec<RecordBatch>,
     ) -> Result<Self> {
+        let source = RecordBatchSource::new(schema, batches)?;
+        self.data_source = Some(Box::new(source));
+        Ok(self)
+    }
+
+    /// Load data from RecordBatches (convenience method for testing)
+    ///
+    /// Infers schema from the first batch. All batches must have the same schema.
+    ///
+    /// # Arguments
+    /// * `batches` - Vector of RecordBatches containing the data
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let batch = RecordBatch::try_new(schema, columns)?;
+    /// let cube = ElastiCubeBuilder::new("test")
+    ///     .with_data(vec![batch])?
+    ///     .build()?;
+    /// ```
+    pub fn with_data(mut self, batches: Vec<RecordBatch>) -> Result<Self> {
+        if batches.is_empty() {
+            return Err(Error::builder("Cannot load empty batch vector"));
+        }
+
+        let schema = batches[0].schema();
         let source = RecordBatchSource::new(schema, batches)?;
         self.data_source = Some(Box::new(source));
         Ok(self)
