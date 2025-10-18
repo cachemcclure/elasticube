@@ -126,7 +126,7 @@ impl QueryCache {
 }
 
 /// Cache statistics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CacheStats {
     /// Number of cache hits
     pub hits: usize,

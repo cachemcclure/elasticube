@@ -1,9 +1,13 @@
 [package]
 name = "elasticube-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+authors = ["Cache McClure <cache.mcclure@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cachemcclure/elasticube"
+homepage = "https://github.com/cachemcclure/elasticube"
+documentation = "https://docs.rs/elasticube-core"
+readme = "../README.md"
 description = "High-performance OLAP cube builder and query library"
 keywords = ["olap", "analytics", "cube", "arrow", "datafusion"]
 categories = ["database", "data-structures"]
@@ -26,8 +30,27 @@ num_cpus = "1.16"
 lru = "0.12"
 regex = "1.10"
 
+# Optional dependencies for multi-source support
+arrow-odbc = { version = "20", optional = true }
+reqwest = { version = "0.12", features = ["json", "blocking"], optional = true }
+url = { version = "2.5", optional = true }
+object_store = { version = "0.11", features = ["aws", "gcp", "azure"], optional = true }
+bytes = { version = "1.0", optional = true }
+futures = { version = "0.3", optional = true }
+
+[features]
+default = []
+database = ["arrow-odbc"]  # PostgreSQL, MySQL, etc. via ODBC
+rest-api = ["reqwest", "url"]  # REST API data sources
+object-storage = ["object_store", "bytes", "futures"]  # S3, GCS, Azure Blob Storage
+all-sources = ["database", "rest-api", "object-storage"]
+
 [dev-dependencies]
 tokio-test = "0.4"
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3.0"  # For creating temporary test files
 
 [[example]]
 name = "calculated_fields_demo"
@@ -40,3 +63,21 @@ path = "../examples/query_materialization_demo.rs"
 [[example]]
 name = "data_updates_demo"
 path = "../examples/data_updates_demo.rs"
+
+[[example]]
+name = "multi_source_demo"
+path = "../examples/multi_source_demo.rs"
+
+[[example]]
+name = "object_storage_demo"
+path = "../examples/object_storage_demo.rs"
+required-features = ["object-storage"]
+
+# Benchmark configuration
+[[bench]]
+name = "query_benchmarks"
+harness = false
+
+[[bench]]
+name = "data_loading_benchmarks"
+harness = false

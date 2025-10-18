@@ -88,6 +88,102 @@ impl PyElastiCubeBuilder {
         Ok(())
     }
 
+    /// Add a hierarchy to the cube
+    ///
+    /// # Arguments
+    /// * `name` - Name of the hierarchy (e.g., "time_hierarchy")
+    /// * `levels` - List of dimension names forming the hierarchy from coarse to fine
+    ///              (e.g., ["year", "quarter", "month"])
+    ///
+    /// # Example
+    /// ```python
+    /// builder.add_hierarchy("time", ["year", "quarter", "month"])
+    /// ```
+    fn add_hierarchy(&mut self, name: String, levels: Vec<String>) -> PyResult<()> {
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.add_hierarchy(name, levels)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?);
+        Ok(())
+    }
+
+    /// Add a calculated measure (derived from expression)
+    ///
+    /// # Arguments
+    /// * `name` - Name for the calculated measure
+    /// * `expression` - SQL expression (e.g., "revenue - cost")
+    /// * `data_type` - Expected result data type
+    /// * `agg_func` - Aggregation function
+    ///
+    /// # Example
+    /// ```python
+    /// builder.add_calculated_measure("profit", "revenue - cost", "float64", "sum")
+    /// ```
+    fn add_calculated_measure(
+        &mut self,
+        name: String,
+        expression: String,
+        data_type: String,
+        agg_func: String,
+    ) -> PyResult<()> {
+        let dt = parse_datatype(&data_type)?;
+        let agg = parse_agg_func(&agg_func)?;
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.add_calculated_measure(name, expression, dt, agg)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?);
+        Ok(())
+    }
+
+    /// Add a virtual dimension (computed dimension)
+    ///
+    /// # Arguments
+    /// * `name` - Name for the virtual dimension
+    /// * `expression` - SQL expression (e.g., "EXTRACT(YEAR FROM sale_date)")
+    /// * `data_type` - Expected result data type
+    ///
+    /// # Example
+    /// ```python
+    /// builder.add_virtual_dimension("year", "EXTRACT(YEAR FROM sale_date)", "int32")
+    /// ```
+    fn add_virtual_dimension(
+        &mut self,
+        name: String,
+        expression: String,
+        data_type: String,
+    ) -> PyResult<()> {
+        let dt = parse_datatype(&data_type)?;
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.add_virtual_dimension(name, expression, dt)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?);
+        Ok(())
+    }
+
+    /// Set the cube description
+    ///
+    /// # Arguments
+    /// * `description` - Human-readable description of the cube
+    ///
+    /// # Example
+    /// ```python
+    /// builder.with_description("Sales data cube for 2024")
+    /// ```
+    fn with_description(&mut self, description: String) -> PyResult<()> {
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.with_description(description));
+        Ok(())
+    }
+
     /// Build the cube
     fn build(&mut self) -> PyResult<Py<PyElastiCube>> {
         let builder = self.builder.take().ok_or_else(|| {
@@ -325,6 +421,180 @@ impl PyElastiCube {
         cube.consolidate_batches()
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
     }
+
+    /// Get all dimensions
+    ///
+    /// Returns:
+    ///     List of dimension dictionaries with keys: name, data_type, cardinality
+    fn dimensions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+
+        let dims = cube.dimensions();
+        let py_list = pyo3::types::PyList::empty(py);
+
+        for dim in dims {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("name", dim.name())?;
+            dict.set_item("data_type", format!("{:?}", dim.data_type()))?;
+            dict.set_item("cardinality", dim.cardinality())?;
+            py_list.append(dict)?;
+        }
+
+        Ok(py_list)
+    }
+
+    /// Get all measures
+    ///
+    /// Returns:
+    ///     List of measure dictionaries with keys: name, data_type, agg_func
+    fn measures<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+
+        let measures = cube.measures();
+        let py_list = pyo3::types::PyList::empty(py);
+
+        for measure in measures {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("name", measure.name())?;
+            dict.set_item("data_type", format!("{:?}", measure.data_type()))?;
+            dict.set_item("agg_func", format!("{:?}", measure.default_agg()))?;
+            py_list.append(dict)?;
+        }
+
+        Ok(py_list)
+    }
+
+    /// Get all hierarchies
+    ///
+    /// Returns:
+    ///     List of hierarchy dictionaries with keys: name, levels
+    fn hierarchies<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+
+        let hierarchies = cube.hierarchies();
+        let py_list = pyo3::types::PyList::empty(py);
+
+        for hierarchy in hierarchies {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("name", hierarchy.name())?;
+            dict.set_item("levels", hierarchy.levels())?;
+            py_list.append(dict)?;
+        }
+
+        Ok(py_list)
+    }
+
+    /// Get a specific dimension by name
+    ///
+    /// Args:
+    ///     name: Name of the dimension to retrieve
+    ///
+    /// Returns:
+    ///     Dictionary with dimension metadata or None if not found
+    fn get_dimension<'py>(&self, py: Python<'py>, name: String) -> PyResult<Option<Bound<'py, pyo3::types::PyDict>>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+
+        if let Some(dim) = cube.get_dimension(&name) {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("name", dim.name())?;
+            dict.set_item("data_type", format!("{:?}", dim.data_type()))?;
+            dict.set_item("cardinality", dim.cardinality())?;
+            Ok(Some(dict))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get a specific measure by name
+    ///
+    /// Args:
+    ///     name: Name of the measure to retrieve
+    ///
+    /// Returns:
+    ///     Dictionary with measure metadata or None if not found
+    fn get_measure<'py>(&self, py: Python<'py>, name: String) -> PyResult<Option<Bound<'py, pyo3::types::PyDict>>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+
+        if let Some(measure) = cube.get_measure(&name) {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("name", measure.name())?;
+            dict.set_item("data_type", format!("{:?}", measure.data_type()))?;
+            dict.set_item("agg_func", format!("{:?}", measure.default_agg()))?;
+            Ok(Some(dict))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get a specific hierarchy by name
+    ///
+    /// Args:
+    ///     name: Name of the hierarchy to retrieve
+    ///
+    /// Returns:
+    ///     Dictionary with hierarchy metadata or None if not found
+    fn get_hierarchy<'py>(&self, py: Python<'py>, name: String) -> PyResult<Option<Bound<'py, pyo3::types::PyDict>>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+
+        if let Some(hierarchy) = cube.get_hierarchy(&name) {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("name", hierarchy.name())?;
+            dict.set_item("levels", hierarchy.levels())?;
+            Ok(Some(dict))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get the cube description
+    ///
+    /// Returns:
+    ///     Description string or None if not set
+    fn description(&self) -> PyResult<Option<String>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+        Ok(cube.schema().description().map(|s| s.to_string()))
+    }
+
+    /// Get cube statistics
+    ///
+    /// Returns:
+    ///     Dictionary with statistics including row_count, partition_count,
+    ///     memory_bytes, and column_stats
+    fn statistics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let cube = self.cube.lock()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e)))?;
+
+        let stats = cube.statistics();
+        let dict = pyo3::types::PyDict::new(py);
+
+        dict.set_item("row_count", stats.row_count)?;
+        dict.set_item("partition_count", stats.partition_count)?;
+        dict.set_item("avg_rows_per_partition", stats.avg_rows_per_partition)?;
+        dict.set_item("memory_bytes", stats.memory_bytes)?;
+        dict.set_item("memory_mb", stats.memory_bytes as f64 / 1_048_576.0)?;
+
+        // Add column statistics
+        let col_stats_list = pyo3::types::PyList::empty(py);
+        for col_stat in &stats.column_stats {
+            let col_dict = pyo3::types::PyDict::new(py);
+            col_dict.set_item("column_index", col_stat.column_index)?;
+            col_dict.set_item("column_name", &col_stat.column_name)?;
+            col_dict.set_item("null_count", col_stat.null_count)?;
+            col_dict.set_item("null_percentage", col_stat.null_percentage)?;
+            col_dict.set_item("distinct_count", col_stat.distinct_count)?;
+            col_stats_list.append(col_dict)?;
+        }
+        dict.set_item("column_stats", col_stats_list)?;
+
+        Ok(dict)
+    }
 }
 
 /// Python wrapper for QueryBuilder
@@ -385,6 +655,106 @@ impl PyQueryBuilder {
         })?;
 
         self.builder = Some(builder.limit(n));
+        Ok(())
+    }
+
+    /// Skip a number of rows (offset)
+    ///
+    /// # Arguments
+    /// * `count` - Number of rows to skip
+    ///
+    /// # Example
+    /// ```python
+    /// query.offset(50)  # Skip first 50 rows
+    /// ```
+    fn offset(&mut self, count: usize) -> PyResult<()> {
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.offset(count));
+        Ok(())
+    }
+
+    /// OLAP Operation: Slice - filter on a single dimension
+    ///
+    /// # Arguments
+    /// * `dimension` - Dimension name to filter on
+    /// * `value` - Value to filter for
+    ///
+    /// # Example
+    /// ```python
+    /// query.slice("region", "North")
+    /// ```
+    fn slice(&mut self, dimension: String, value: String) -> PyResult<()> {
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.slice(dimension, value));
+        Ok(())
+    }
+
+    /// OLAP Operation: Dice - filter on multiple dimensions
+    ///
+    /// # Arguments
+    /// * `filters` - List of (dimension, value) tuples to filter on
+    ///
+    /// # Example
+    /// ```python
+    /// query.dice([("region", "North"), ("product", "Widget")])
+    /// ```
+    fn dice(&mut self, filters: Vec<(String, String)>) -> PyResult<()> {
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        // Convert Vec<(String, String)> to &[(impl AsRef<str>, impl AsRef<str>)]
+        let filter_refs: Vec<(&str, &str)> = filters
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
+        self.builder = Some(builder.dice(&filter_refs));
+        Ok(())
+    }
+
+    /// OLAP Operation: Drill-down - navigate down a hierarchy
+    ///
+    /// # Arguments
+    /// * `parent_level` - Parent level name (for reference)
+    /// * `child_levels` - List of child level names to drill down to
+    ///
+    /// # Example
+    /// ```python
+    /// query.drill_down("year", ["year", "quarter", "month"])
+    /// ```
+    fn drill_down(&mut self, parent_level: String, child_levels: Vec<String>) -> PyResult<()> {
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        let level_refs: Vec<&str> = child_levels.iter().map(|s| s.as_str()).collect();
+        self.builder = Some(builder.drill_down(parent_level, &level_refs));
+        Ok(())
+    }
+
+    /// OLAP Operation: Roll-up - aggregate across dimensions
+    ///
+    /// # Arguments
+    /// * `dimensions_to_remove` - List of dimension names to remove from grouping
+    ///
+    /// # Example
+    /// ```python
+    /// query.roll_up(["region"])  # Aggregate across all regions
+    /// ```
+    fn roll_up(&mut self, dimensions_to_remove: Vec<String>) -> PyResult<()> {
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        let dim_refs: Vec<&str> = dimensions_to_remove.iter().map(|s| s.as_str()).collect();
+        self.builder = Some(builder.roll_up(&dim_refs));
         Ok(())
     }
 

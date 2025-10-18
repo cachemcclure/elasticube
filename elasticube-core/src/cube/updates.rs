@@ -50,6 +50,7 @@ pub(crate) fn concat_record_batches(
 ///
 /// # Returns
 /// A new RecordBatch containing only rows where predicate is true
+#[allow(dead_code)]
 pub(crate) fn filter_record_batch(
     batch: &RecordBatch,
     predicate: &BooleanArray,

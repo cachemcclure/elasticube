@@ -6,6 +6,11 @@ use thiserror::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Error types that can occur during ElastiCube operations
+///
+/// This enum is marked as `#[non_exhaustive]` to allow adding new error variants
+/// in future versions without breaking changes. When pattern matching, always
+/// include a catch-all arm (`_`) to handle future variants.
+#[non_exhaustive]
 #[derive(Error, Debug)]
 pub enum Error {
     /// Arrow-related errors

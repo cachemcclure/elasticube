@@ -58,3 +58,50 @@ pub use error::{Error, Result};
 pub use optimization::{ColumnStatistics, CubeStatistics, OptimizationConfig};
 pub use query::{QueryBuilder, QueryResult};
 pub use sources::{CsvSource, DataSource, JsonSource, ParquetSource, RecordBatchSource};
+
+// Re-export database sources when feature is enabled
+/// Database source connectors (PostgreSQL, MySQL, SQL Server, etc.)
+///
+/// These types are only available when the `database` feature is enabled:
+/// ```toml
+/// [dependencies]
+/// elasticube-core = { version = "0.2", features = ["database"] }
+/// ```
+///
+/// See [`ElastiCubeBuilder::load_postgres`], [`ElastiCubeBuilder::load_mysql`],
+/// and [`ElastiCubeBuilder::load_odbc`] for usage examples.
+#[cfg(feature = "database")]
+pub use sources::database::{MySqlSource, OdbcSource, PostgresSource};
+
+// Re-export REST API sources when feature is enabled
+/// REST API data source connector
+///
+/// This type is only available when the `rest-api` feature is enabled:
+/// ```toml
+/// [dependencies]
+/// elasticube-core = { version = "0.2", features = ["rest-api"] }
+/// ```
+///
+/// See [`ElastiCubeBuilder::load_rest_api`] for usage examples.
+#[cfg(feature = "rest-api")]
+pub use sources::rest::{HttpMethod, RestApiSource};
+
+// Re-export object storage sources when feature is enabled
+/// Object storage source connectors (AWS S3, Google Cloud Storage, Azure Blob Storage)
+///
+/// These types are only available when the `object-storage` feature is enabled:
+/// ```toml
+/// [dependencies]
+/// elasticube-core = { version = "0.2", features = ["object-storage"] }
+/// ```
+///
+/// Or enable all data sources at once:
+/// ```toml
+/// [dependencies]
+/// elasticube-core = { version = "0.2", features = ["all-sources"] }
+/// ```
+///
+/// See [`ElastiCubeBuilder::load_s3`], [`ElastiCubeBuilder::load_gcs`],
+/// and [`ElastiCubeBuilder::load_azure`] for usage examples.
+#[cfg(feature = "object-storage")]
+pub use sources::object_storage::{AzureSource, GcsSource, ObjectStorageSource, S3Source, StorageFileFormat};

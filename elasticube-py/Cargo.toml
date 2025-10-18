@@ -2,9 +2,14 @@
 name = "elasticube-py"
 version = "0.1.0"
 edition = "2021"
+authors = ["Cache McClure <cache.mcclure@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cachemcclure/elasticube"
+homepage = "https://github.com/cachemcclure/elasticube"
+documentation = "https://github.com/cachemcclure/elasticube/tree/main/elasticube-py"
 description = "Python bindings for ElastiCube - high-performance OLAP cube library"
+keywords = ["olap", "analytics", "cube", "arrow", "datafusion"]
+categories = ["api-bindings", "database"]
 
 [lib]
 name = "elasticube"

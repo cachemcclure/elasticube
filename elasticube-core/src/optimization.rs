@@ -8,7 +8,7 @@ use datafusion::execution::runtime_env::RuntimeEnv;
 use std::sync::Arc;
 
 /// Configuration for query optimization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OptimizationConfig {
     /// Target number of partitions for parallel query execution
     /// Higher values enable more parallelism but increase overhead

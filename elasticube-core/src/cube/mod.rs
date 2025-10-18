@@ -108,17 +108,36 @@ impl ElastiCube {
 
     /// Create a query builder for this cube
     ///
+    /// This method requires the cube to be wrapped in an `Arc<ElastiCube>` because
+    /// the query builder needs to share ownership of the cube data across async
+    /// query execution and potential caching operations.
+    ///
     /// # Returns
     /// A QueryBuilder instance for executing queries against this cube
     ///
-    /// # Example
+    /// # Arc Requirement
+    /// The cube must be wrapped in `Arc` before calling this method:
+    ///
     /// ```rust,ignore
+    /// use std::sync::Arc;
+    ///
+    /// let cube = ElastiCubeBuilder::new("sales")
+    ///     .load_csv("data.csv")?
+    ///     .build()?;
+    ///
+    /// // Wrap in Arc for querying
+    /// let cube = Arc::new(cube);
+    ///
+    /// // Now we can query
     /// let results = cube.query()?
     ///     .select(&["region", "SUM(sales) as total"])
     ///     .group_by(&["region"])
     ///     .execute()
     ///     .await?;
     /// ```
+    ///
+    /// # See Also
+    /// - [`query_with_config`](Self::query_with_config) - Query with custom optimization settings
     pub fn query(self: Arc<Self>) -> Result<QueryBuilder> {
         QueryBuilder::new(self)
     }
@@ -139,6 +158,10 @@ impl ElastiCube {
 
     /// Create a query builder with custom optimization configuration
     ///
+    /// Like [`query`](Self::query), this requires the cube to be wrapped in `Arc`.
+    /// Use this method when you need to customize query execution behavior such as
+    /// parallelism, batch size, or caching settings.
+    ///
     /// # Arguments
     /// * `config` - Optimization configuration to use for queries
     ///
@@ -147,7 +170,10 @@ impl ElastiCube {
     ///
     /// # Example
     /// ```rust,ignore
+    /// use std::sync::Arc;
     /// use elasticube_core::OptimizationConfig;
+    ///
+    /// let cube = Arc::new(cube); // Wrap in Arc
     ///
     /// let config = OptimizationConfig::new()
     ///     .with_target_partitions(8)

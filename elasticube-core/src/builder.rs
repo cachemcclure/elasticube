@@ -239,6 +239,361 @@ impl ElastiCubeBuilder {
         Ok(self)
     }
 
+    // ==============================================================================
+    // Database Sources (available with "database" feature)
+    // ==============================================================================
+
+    /// Load data from PostgreSQL database
+    ///
+    /// Requires the "database" feature to be enabled.
+    ///
+    /// # Arguments
+    /// * `host` - Database host (e.g., "localhost")
+    /// * `database` - Database name
+    /// * `username` - Username for authentication
+    /// * `password` - Password for authentication
+    /// * `query` - SQL query to execute
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let cube = ElastiCubeBuilder::new("sales")
+    ///     .load_postgres("localhost", "mydb", "user", "pass", "SELECT * FROM sales")?
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "database")]
+    pub fn load_postgres(
+        mut self,
+        host: impl Into<String>,
+        database: impl Into<String>,
+        username: impl Into<String>,
+        password: impl Into<String>,
+        query: impl Into<String>,
+    ) -> Self {
+        use crate::sources::database::PostgresSource;
+        let source = PostgresSource::new(host, database, username, password)
+            .with_query(query);
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from PostgreSQL with custom configuration
+    ///
+    /// Requires the "database" feature to be enabled.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let source = PostgresSource::new("localhost", "mydb", "user", "pass")
+    ///     .with_port(5433)
+    ///     .with_query("SELECT * FROM sales WHERE year = 2024")
+    ///     .with_batch_size(4096);
+    ///
+    /// let cube = ElastiCubeBuilder::new("sales")
+    ///     .load_postgres_with(source)
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "database")]
+    pub fn load_postgres_with(mut self, source: crate::sources::database::PostgresSource) -> Self {
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from MySQL database
+    ///
+    /// Requires the "database" feature to be enabled.
+    ///
+    /// # Arguments
+    /// * `host` - Database host (e.g., "localhost")
+    /// * `database` - Database name
+    /// * `username` - Username for authentication
+    /// * `password` - Password for authentication
+    /// * `query` - SQL query to execute
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let cube = ElastiCubeBuilder::new("orders")
+    ///     .load_mysql("localhost", "mydb", "user", "pass", "SELECT * FROM orders")?
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "database")]
+    pub fn load_mysql(
+        mut self,
+        host: impl Into<String>,
+        database: impl Into<String>,
+        username: impl Into<String>,
+        password: impl Into<String>,
+        query: impl Into<String>,
+    ) -> Self {
+        use crate::sources::database::MySqlSource;
+        let source = MySqlSource::new(host, database, username, password)
+            .with_query(query);
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from MySQL with custom configuration
+    ///
+    /// Requires the "database" feature to be enabled.
+    #[cfg(feature = "database")]
+    pub fn load_mysql_with(mut self, source: crate::sources::database::MySqlSource) -> Self {
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data via generic ODBC connection
+    ///
+    /// Supports any ODBC-compatible database (PostgreSQL, MySQL, SQL Server, SQLite, etc.).
+    /// Requires the "database" feature to be enabled.
+    ///
+    /// # Arguments
+    /// * `connection_string` - ODBC connection string
+    /// * `query` - SQL query to execute
+    ///
+    /// # Example Connection Strings
+    ///
+    /// **PostgreSQL**:
+    /// ```text
+    /// Driver={PostgreSQL Unicode};Server=localhost;Port=5432;Database=mydb;Uid=user;Pwd=pass;
+    /// ```
+    ///
+    /// **SQL Server**:
+    /// ```text
+    /// Driver={ODBC Driver 17 for SQL Server};Server=localhost;Database=mydb;Uid=user;Pwd=pass;
+    /// ```
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let cube = ElastiCubeBuilder::new("analytics")
+    ///     .load_odbc(
+    ///         "Driver={PostgreSQL Unicode};Server=localhost;Database=analytics;Uid=admin;Pwd=secret;",
+    ///         "SELECT * FROM metrics WHERE date >= '2024-01-01'"
+    ///     )
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "database")]
+    pub fn load_odbc(
+        mut self,
+        connection_string: impl Into<String>,
+        query: impl Into<String>,
+    ) -> Self {
+        use crate::sources::database::OdbcSource;
+        let source = OdbcSource::new(connection_string, query);
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data via ODBC with custom configuration
+    ///
+    /// Requires the "database" feature to be enabled.
+    #[cfg(feature = "database")]
+    pub fn load_odbc_with(mut self, source: crate::sources::database::OdbcSource) -> Self {
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    // ==============================================================================
+    // REST API Sources (available with "rest-api" feature)
+    // ==============================================================================
+
+    /// Load data from a REST API endpoint
+    ///
+    /// Requires the "rest-api" feature to be enabled.
+    /// The API must return JSON data (either an array of objects or a single object).
+    ///
+    /// # Arguments
+    /// * `url` - API endpoint URL
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let cube = ElastiCubeBuilder::new("api_data")
+    ///     .load_rest_api("https://api.example.com/sales")
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "rest-api")]
+    pub fn load_rest_api(mut self, url: impl Into<String>) -> Self {
+        use crate::sources::rest::RestApiSource;
+        let source = RestApiSource::new(url);
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from a REST API with custom configuration
+    ///
+    /// Requires the "rest-api" feature to be enabled.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let source = RestApiSource::new("https://api.example.com/data")
+    ///     .with_method(HttpMethod::Post)
+    ///     .with_header("Authorization", "Bearer token123")
+    ///     .with_query_param("limit", "1000")
+    ///     .with_timeout_secs(60);
+    ///
+    /// let cube = ElastiCubeBuilder::new("api_data")
+    ///     .load_rest_api_with(source)
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "rest-api")]
+    pub fn load_rest_api_with(mut self, source: crate::sources::rest::RestApiSource) -> Self {
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    // ==============================================================================
+    // Object Storage Sources (available with "object-storage" feature)
+    // ==============================================================================
+
+    /// Load data from AWS S3
+    ///
+    /// Requires the "object-storage" feature to be enabled.
+    ///
+    /// # Arguments
+    /// * `bucket` - S3 bucket name
+    /// * `path` - Path to the file in the bucket (e.g., "data/sales.parquet")
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // Uses AWS credentials from environment or ~/.aws/credentials
+    /// let cube = ElastiCubeBuilder::new("sales")
+    ///     .load_s3("my-bucket", "data/sales.parquet")
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "object-storage")]
+    pub fn load_s3(
+        mut self,
+        bucket: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Self {
+        use crate::sources::object_storage::S3Source;
+        let source = S3Source::new(bucket, path);
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from AWS S3 with custom configuration
+    ///
+    /// Requires the "object-storage" feature to be enabled.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use elasticube_core::{S3Source, StorageFileFormat};
+    ///
+    /// let source = S3Source::new("my-bucket", "data/sales.csv")
+    ///     .with_region("us-west-2")
+    ///     .with_access_key("AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+    ///     .with_format(StorageFileFormat::Csv)
+    ///     .with_batch_size(4096);
+    ///
+    /// let cube = ElastiCubeBuilder::new("sales")
+    ///     .load_s3_with(source)
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "object-storage")]
+    pub fn load_s3_with(mut self, source: crate::sources::object_storage::S3Source) -> Self {
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from Google Cloud Storage (GCS)
+    ///
+    /// Requires the "object-storage" feature to be enabled.
+    ///
+    /// # Arguments
+    /// * `bucket` - GCS bucket name
+    /// * `path` - Path to the file in the bucket
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // Uses Google Cloud credentials from GOOGLE_APPLICATION_CREDENTIALS env var
+    /// let cube = ElastiCubeBuilder::new("analytics")
+    ///     .load_gcs("my-gcs-bucket", "data/analytics.parquet")
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "object-storage")]
+    pub fn load_gcs(
+        mut self,
+        bucket: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Self {
+        use crate::sources::object_storage::GcsSource;
+        let source = GcsSource::new(bucket, path);
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from Google Cloud Storage with custom configuration
+    ///
+    /// Requires the "object-storage" feature to be enabled.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use elasticube_core::{GcsSource, StorageFileFormat};
+    ///
+    /// let source = GcsSource::new("my-bucket", "data/metrics.json")
+    ///     .with_service_account_key("/path/to/key.json")
+    ///     .with_format(StorageFileFormat::Json)
+    ///     .with_batch_size(8192);
+    ///
+    /// let cube = ElastiCubeBuilder::new("metrics")
+    ///     .load_gcs_with(source)
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "object-storage")]
+    pub fn load_gcs_with(mut self, source: crate::sources::object_storage::GcsSource) -> Self {
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from Azure Blob Storage
+    ///
+    /// Requires the "object-storage" feature to be enabled.
+    ///
+    /// # Arguments
+    /// * `account` - Azure storage account name
+    /// * `container` - Container name
+    /// * `path` - Path to the file in the container
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let cube = ElastiCubeBuilder::new("reports")
+    ///     .load_azure("mystorageaccount", "mycontainer", "data/reports.parquet")
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "object-storage")]
+    pub fn load_azure(
+        mut self,
+        account: impl Into<String>,
+        container: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Self {
+        use crate::sources::object_storage::AzureSource;
+        let source = AzureSource::new(account, container, path);
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
+    /// Load data from Azure Blob Storage with custom configuration
+    ///
+    /// Requires the "object-storage" feature to be enabled.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use elasticube_core::{AzureSource, StorageFileFormat};
+    ///
+    /// let source = AzureSource::new("mystorageaccount", "mycontainer", "data/logs.csv")
+    ///     .with_access_key("your-access-key")
+    ///     .with_format(StorageFileFormat::Csv)
+    ///     .with_batch_size(4096);
+    ///
+    /// let cube = ElastiCubeBuilder::new("logs")
+    ///     .load_azure_with(source)
+    ///     .build()?;
+    /// ```
+    #[cfg(feature = "object-storage")]
+    pub fn load_azure_with(mut self, source: crate::sources::object_storage::AzureSource) -> Self {
+        self.data_source = Some(Box::new(source));
+        self
+    }
+
     /// Build the cube
     ///
     /// Loads data from the configured source and creates an ElastiCube.

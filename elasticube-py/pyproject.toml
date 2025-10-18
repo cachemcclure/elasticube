@@ -7,6 +7,12 @@ name = "elasticube"
 version = "0.1.0"
 description = "High-performance OLAP cube library with Rust backend"
 readme = "README.md"
+authors = [
+    { name = "Cache McClure", email = "cache.mcclure@gmail.com" }
+]
+maintainers = [
+    { name = "Horizon Analytic Studios" }
+]
 requires-python = ">=3.8"
 license = { text = "MIT OR Apache-2.0" }
 keywords = ["olap", "analytics", "cube", "arrow", "datafusion"]
@@ -23,6 +29,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/cachemcclure/elasticube"
+Repository = "https://github.com/cachemcclure/elasticube"
+Issues = "https://github.com/cachemcclure/elasticube/issues"
+Documentation = "https://github.com/cachemcclure/elasticube/tree/main/elasticube-py"
 dependencies = [
     "pyarrow>=14.0.0",
     "pandas>=2.0.0",
