@@ -719,4 +719,4 @@ elasticube-core = { version = "0.1.0", features = ["database", "rest-api"] }
 
 **End of User Guide**
 
-For the latest updates, see: https://github.com/yourorg/elasticube
+For the latest updates, see: https://github.com/cachemcclure/elasticube
