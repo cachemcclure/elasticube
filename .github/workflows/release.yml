@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, x86, aarch64, armv7]
+        target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, x86, aarch64, armv7]
+        target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
 
@@ -111,7 +111,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        target: [x64, x86]
+        target: [x64]
     steps:
       - uses: actions/checkout@v4
 
