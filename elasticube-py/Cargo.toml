@@ -16,7 +16,7 @@ name = "elasticube"
 crate-type = ["cdylib"]
 
 [dependencies]
-elasticube-core = { path = "../elasticube-core" }
+elasticube-core = { version = "1.0.0", path = "../elasticube-core" }
 pyo3 = { version = "0.26", features = ["extension-module", "abi3-py38"] }
 arrow = { version = "56", features = ["ipc"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
