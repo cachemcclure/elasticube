@@ -1,6 +1,6 @@
 [package]
 name = "elasticube-py"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["Cache McClure <cache.mcclure@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -16,7 +16,7 @@ name = "elasticube"
 crate-type = ["cdylib"]
 
 [dependencies]
-elasticube-core = { version = "1.0.0", path = "../elasticube-core" }
+elasticube-core = { version = "1.0.1", path = "../elasticube-core" }
 pyo3 = { version = "0.26", features = ["extension-module", "abi3-py38"] }
 arrow = { version = "56", features = ["ipc"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
