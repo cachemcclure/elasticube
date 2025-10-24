@@ -210,3 +210,4 @@ jobs:
         with:
           packages-dir: wheels/
           skip-existing: true
+          password: ${{ secrets.PYPI_API_TOKEN }}
