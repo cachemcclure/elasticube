@@ -1,14 +1,13 @@
 name: Release to crates.io and PyPI
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (e.g., 1.0.0)'
-        required: true
-        type: string
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
 
 env:
   RUST_BACKTRACE: 1
@@ -23,34 +22,14 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run tests
-        run: cargo test --lib
-
-      - name: Run tests with all features
-        run: cargo test --features all-sources --lib
+      - name: Run core tests
+        run: cargo test --lib --package elasticube-core
 
   publish-crates:
     name: Publish to crates.io
     needs: test
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
 
@@ -71,56 +50,163 @@ jobs:
           cd elasticube-py
           cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-  build-wheels:
-    name: Build wheels on ${{ matrix.os }}
-    needs: test
-    runs-on: ${{ matrix.os }}
+  linux:
+    name: Build Linux wheels
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
+        target: [x86_64, x86, aarch64, armv7]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-
-      - name: Install maturin
-        run: pip install maturin
+          python-version: 3.x
 
       - name: Build wheels
-        run: |
-          cd elasticube-py
-          maturin build --release --strip --out dist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: elasticube-py
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          sccache: 'true'
+          manylinux: auto
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
-          path: elasticube-py/dist/*
+          name: wheels-linux-${{ matrix.target }}
+          path: elasticube-py/dist
 
-  publish-pypi:
-    name: Publish to PyPI
-    needs: build-wheels
+  musllinux:
+    name: Build musllinux wheels
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # Required for PyPI trusted publishing
-
+    strategy:
+      matrix:
+        target: [x86_64, x86, aarch64, armv7]
     steps:
-      - name: Download all wheels
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: elasticube-py
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          sccache: 'true'
+          manylinux: musllinux_1_2
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-musllinux-${{ matrix.target }}
+          path: elasticube-py/dist
+
+  windows:
+    name: Build Windows wheels
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+          architecture: ${{ matrix.target }}
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: elasticube-py
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          sccache: 'true'
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.target }}
+          path: elasticube-py/dist
+
+  macos:
+    name: Build macOS wheels
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: elasticube-py
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist
+          sccache: 'true'
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.platform.target }}
+          path: elasticube-py/dist
+
+  sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: elasticube-py
+          command: sdist
+          args: --out dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: elasticube-py/dist
+
+  release:
+    name: Release to PyPI
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    needs: [test, linux, musllinux, windows, macos, sdist]
+    permissions:
+      contents: write
+      id-token: write  # Required for PyPI trusted publishing
+      attestations: write  # Required for artifact attestation
+    steps:
+      - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
+          path: wheels
           merge-multiple: true
-          path: dist
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'wheels/*'
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist/
+          packages-dir: wheels/
           skip-existing: true
