@@ -41,7 +41,7 @@ add_serialization_methods(ElastiCube)
 # Enable Jupyter integration if available
 _jupyter_enabled = enable_jupyter_integration()
 
-__version__ = "0.1.0"
+__version__ = "1.0.2"
 __all__ = [
     "ElastiCubeBuilder",
     "ElastiCube",

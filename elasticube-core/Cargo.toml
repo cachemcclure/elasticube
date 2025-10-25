@@ -1,6 +1,6 @@
 [package]
 name = "elasticube-core"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 authors = ["Cache McClure <cache.mcclure@gmail.com>"]
 license = "MIT OR Apache-2.0"

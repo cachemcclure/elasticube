@@ -1,6 +1,6 @@
 # ElastiCube Library - User Guide
 
-**Version**: 0.1.0
+**Version**: 1.0.2
 **Last Updated**: October 2025
 
 ## Table of Contents
@@ -56,12 +56,12 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-elasticube-core = "0.1.0"
+elasticube-core = "1.0.2"
 
 # Optional features
-# elasticube-core = { version = "0.1.0", features = ["database", "rest-api", "object-storage"] }
+# elasticube-core = { version = "1.0.2", features = ["database", "rest-api", "object-storage"] }
 # Or enable all sources:
-# elasticube-core = { version = "0.1.0", features = ["all-sources"] }
+# elasticube-core = { version = "1.0.2", features = ["all-sources"] }
 ```
 
 ### Python
@@ -682,7 +682,7 @@ cube.consolidate_batches()?;
 
 Enable features in `Cargo.toml`:
 ```toml
-elasticube-core = { version = "0.1.0", features = ["database", "rest-api"] }
+elasticube-core = { version = "1.0.2", features = ["database", "rest-api"] }
 ```
 
 ## Appendix C: SQL Function Reference

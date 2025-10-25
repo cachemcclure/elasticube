@@ -57,7 +57,7 @@ class CubeSerializer:
         metadata = {
             "name": cube.name(),
             "row_count": cube.row_count(),
-            "version": "0.1.0",
+            "version": "1.0.2",
         }
 
         # Save metadata

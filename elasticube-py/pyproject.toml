@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "elasticube"
-version = "1.0.1"
+version = "1.0.2"
 description = "High-performance OLAP cube library with Rust backend"
 readme = "README.md"
 authors = [
