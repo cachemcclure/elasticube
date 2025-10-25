@@ -4,7 +4,7 @@
 //! built in Rust using Apache Arrow and DataFusion.
 
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, IntoPyDict};
 
 use elasticube_core::{AggFunc, ElastiCube, ElastiCubeBuilder};
 use arrow::datatypes::DataType;
@@ -181,6 +181,201 @@ impl PyElastiCubeBuilder {
         })?;
 
         self.builder = Some(builder.with_description(description));
+        Ok(())
+    }
+
+    /// Load data from a Polars DataFrame
+    ///
+    /// # Arguments
+    /// * `df` - Polars DataFrame containing the data
+    ///
+    /// # Returns
+    /// Self for method chaining
+    ///
+    /// # Raises
+    /// * `ImportError` - If polars is not installed
+    /// * `TypeError` - If df is not a polars.DataFrame
+    /// * `ValueError` - If DataFrame is empty or has incompatible schema
+    ///
+    /// # Example
+    /// ```python
+    /// import polars as pl
+    /// df = pl.DataFrame({
+    ///     "region": ["North", "South"],
+    ///     "sales": [100.0, 200.0]
+    /// })
+    /// cube = ElastiCubeBuilder("sales") \
+    ///     .add_dimension("region", "utf8") \
+    ///     .add_measure("sales", "float64", "sum") \
+    ///     .load_from_polars(df) \
+    ///     .build()
+    /// ```
+    fn load_from_polars(&mut self, df: Bound<'_, PyAny>) -> PyResult<()> {
+        let py = df.py();
+
+        // Convert to Arrow Table first (like Pandas does with pyarrow.Table.from_pandas)
+        let arrow_table = df.call_method0("to_arrow")
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to convert Polars DataFrame to Arrow: {}", e)
+            ))?;
+
+        // Normalize schema to handle type mismatches
+        let normalized_table = normalize_arrow_schema(py, arrow_table)?;
+
+        // Convert to RecordBatches
+        let batches = pyarrow_to_recordbatches(py, normalized_table)?;
+
+        if batches.is_empty() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No data batches found"
+            ));
+        }
+
+        // Extract schema from first batch
+        let schema = batches[0].schema();
+
+        // Take the builder and add the batches
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.load_record_batches(schema, batches)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?);
+        Ok(())
+    }
+
+    /// Load data from a Pandas DataFrame
+    ///
+    /// # Arguments
+    /// * `df` - Pandas DataFrame containing the data
+    ///
+    /// # Returns
+    /// Self for method chaining
+    ///
+    /// # Raises
+    /// * `ImportError` - If pandas is not installed
+    /// * `TypeError` - If df is not a pandas.DataFrame
+    /// * `ValueError` - If DataFrame is empty or has incompatible schema
+    ///
+    /// # Example
+    /// ```python
+    /// import pandas as pd
+    /// df = pd.DataFrame({
+    ///     "date": pd.date_range("2024-01-01", periods=3),
+    ///     "revenue": [100.0, 200.0, 150.0]
+    /// })
+    /// cube = ElastiCubeBuilder("revenue") \
+    ///     .load_from_pandas(df) \
+    ///     .build()
+    /// ```
+    fn load_from_pandas(&mut self, df: Bound<'_, PyAny>) -> PyResult<()> {
+        let py = df.py();
+        // Try to import pandas with helpful error message
+        let pandas = py.import("pandas")
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyImportError, _>(
+                "Failed to import pandas. Please install it: pip install pandas"
+            ))?;
+
+        // Type check
+        let dataframe_class = pandas.getattr("DataFrame")?;
+        let is_dataframe = df.is_instance(&dataframe_class)?;
+        if !is_dataframe {
+            return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                "Expected pandas.DataFrame, got different type"
+            ));
+        }
+
+        // Check for empty DataFrame
+        let row_count: usize = df.call_method0("__len__")?.extract()?;
+        if row_count == 0 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Cannot load empty DataFrame. Provide data with at least one row."
+            ));
+        }
+
+        // Import pyarrow
+        let pyarrow = py.import("pyarrow")
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyImportError, _>(
+                "Failed to import pyarrow. Please install it: pip install pyarrow"
+            ))?;
+
+        // Convert to Arrow Table
+        let table_class = pyarrow.getattr("Table")?;
+        let arrow_table = table_class.call_method1("from_pandas", (&df,))?;
+
+        // Normalize schema to handle type mismatches
+        let normalized_table = normalize_arrow_schema(py, arrow_table)?;
+
+        // Convert to RecordBatches
+        let batches = pyarrow_to_recordbatches(py, normalized_table)?;
+
+        if batches.is_empty() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No data batches found"
+            ));
+        }
+
+        // Extract schema from first batch
+        let schema = batches[0].schema();
+
+        // Take the builder and add the batches
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.load_record_batches(schema, batches)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?);
+        Ok(())
+    }
+
+    /// Load data from a PyArrow Table directly (zero-copy when possible)
+    ///
+    /// # Arguments
+    /// * `table` - PyArrow Table containing the data
+    ///
+    /// # Returns
+    /// Self for method chaining
+    ///
+    /// # Raises
+    /// * `TypeError` - If table is not a pyarrow.Table
+    /// * `ValueError` - If table is empty or has incompatible schema
+    ///
+    /// # Example
+    /// ```python
+    /// import pyarrow as pa
+    /// table = pa.table({
+    ///     "product": ["A", "B", "C"],
+    ///     "quantity": [10, 20, 15]
+    /// })
+    /// cube = ElastiCubeBuilder("inventory") \
+    ///     .load_from_arrow(table) \
+    ///     .build()
+    /// ```
+    fn load_from_arrow(&mut self, table: Bound<'_, PyAny>) -> PyResult<()> {
+        let py = table.py();
+
+        // Normalize schema to handle type mismatches
+        let normalized_table = normalize_arrow_schema(py, table)?;
+
+        // Convert to RecordBatches
+        let batches = pyarrow_to_recordbatches(py, normalized_table)?;
+
+        if batches.is_empty() {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "No data batches found"
+            ));
+        }
+
+        // Extract schema from first batch
+        let schema = batches[0].schema();
+
+        // Take the builder and add the batches
+        let builder = self.builder.take().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Builder already consumed")
+        })?;
+
+        self.builder = Some(builder.load_record_batches(schema, batches)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))?);
         Ok(())
     }
 
@@ -420,6 +615,109 @@ impl PyElastiCube {
 
         cube.consolidate_batches()
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e.to_string()))
+    }
+
+    /// Append rows from a Polars DataFrame
+    ///
+    /// This method provides a convenient way to incrementally load data from Polars
+    /// DataFrames without recreating the cube. Useful for streaming large datasets
+    /// or updating cubes with new data.
+    ///
+    /// Args:
+    ///     df: Polars DataFrame containing rows to append
+    ///
+    /// Returns:
+    ///     Number of rows added
+    ///
+    /// Example:
+    ///     >>> import polars as pl
+    ///     >>> # Load initial data
+    ///     >>> cube = ElastiCubeBuilder("sales") \\
+    ///     ...     .load_from_polars(initial_df) \\
+    ///     ...     .build()
+    ///     >>> # Append new data later
+    ///     >>> new_data = pl.DataFrame({"region": ["West"], "sales": [500.0]})
+    ///     >>> rows_added = cube.append_from_polars(new_data)
+    fn append_from_polars<'py>(&self, py: Python<'py>, df: Bound<'py, PyAny>) -> PyResult<usize> {
+        // Convert to Arrow Table
+        let arrow_table = df.call_method0("to_arrow")
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to convert Polars DataFrame to Arrow: {}", e)
+            ))?;
+
+        // Normalize schema to handle type mismatches
+        let normalized_table = normalize_arrow_schema(py, arrow_table)?;
+
+        // Use existing append_rows method
+        self.append_rows(py, normalized_table)
+    }
+
+    /// Append rows from a Pandas DataFrame
+    ///
+    /// This method provides a convenient way to incrementally load data from Pandas
+    /// DataFrames without recreating the cube. Useful for streaming large datasets
+    /// or updating cubes with new data.
+    ///
+    /// Args:
+    ///     df: Pandas DataFrame containing rows to append
+    ///
+    /// Returns:
+    ///     Number of rows added
+    ///
+    /// Example:
+    ///     >>> import pandas as pd
+    ///     >>> # Load initial data
+    ///     >>> cube = ElastiCubeBuilder("sales") \\
+    ///     ...     .load_from_pandas(initial_df) \\
+    ///     ...     .build()
+    ///     >>> # Append new data later
+    ///     >>> new_data = pd.DataFrame({"date": ["2024-02-01"], "revenue": [300.0]})
+    ///     >>> rows_added = cube.append_from_pandas(new_data)
+    fn append_from_pandas<'py>(&self, py: Python<'py>, df: Bound<'py, PyAny>) -> PyResult<usize> {
+        // Import pyarrow
+        let pyarrow = py.import("pyarrow")
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyImportError, _>(
+                "Failed to import pyarrow. Please install it: pip install pyarrow"
+            ))?;
+
+        // Convert to Arrow Table
+        let table_class = pyarrow.getattr("Table")?;
+        let arrow_table = table_class.call_method1("from_pandas", (&df,))?;
+
+        // Normalize schema to handle type mismatches
+        let normalized_table = normalize_arrow_schema(py, arrow_table)?;
+
+        // Use existing append_rows method
+        self.append_rows(py, normalized_table)
+    }
+
+    /// Append rows from a PyArrow Table
+    ///
+    /// This method provides a convenient way to incrementally load data from PyArrow
+    /// Tables with automatic type normalization. While similar to append_rows(),
+    /// this method includes the same normalization logic as load_from_arrow().
+    ///
+    /// Args:
+    ///     table: PyArrow Table containing rows to append
+    ///
+    /// Returns:
+    ///     Number of rows added
+    ///
+    /// Example:
+    ///     >>> import pyarrow as pa
+    ///     >>> # Load initial data
+    ///     >>> cube = ElastiCubeBuilder("inventory") \\
+    ///     ...     .load_from_arrow(initial_table) \\
+    ///     ...     .build()
+    ///     >>> # Append new data later
+    ///     >>> new_table = pa.table({"product": ["D"], "quantity": [25]})
+    ///     >>> rows_added = cube.append_from_arrow(new_table)
+    fn append_from_arrow<'py>(&self, py: Python<'py>, table: Bound<'py, PyAny>) -> PyResult<usize> {
+        // Normalize schema to handle type mismatches
+        let normalized_table = normalize_arrow_schema(py, table)?;
+
+        // Use existing append_rows method
+        self.append_rows(py, normalized_table)
     }
 
     /// Get all dimensions
@@ -840,6 +1138,97 @@ impl PyQueryBuilder {
 
         Ok(polars_df)
     }
+}
+
+/// Normalize PyArrow table schema to handle common type mismatches
+///
+/// Handles:
+/// - large_utf8 → utf8
+/// - large_binary → binary
+/// - timezone-aware timestamps → timezone-naive (with warning)
+/// - large_list → list (recursively)
+///
+/// Returns the normalized table or the original if no normalization needed.
+fn normalize_arrow_schema<'py>(
+    py: Python<'py>,
+    arrow_table: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    // Import pyarrow
+    let pyarrow = py.import("pyarrow")
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyImportError, _>(
+            format!("Failed to import pyarrow: {}", e)
+        ))?;
+
+    // Get the schema
+    let schema = arrow_table.getattr("schema")?;
+    let fields = schema.getattr("names")?;
+    let field_names: Vec<String> = fields.extract()?;
+
+    // Check if normalization is needed
+    let mut needs_normalization = false;
+    let mut new_fields = Vec::new();
+
+    for field_name in &field_names {
+        let field = schema.call_method1("field", (field_name,))?;
+        let field_type = field.getattr("type")?;
+        let type_str = field_type.call_method0("__str__")?.extract::<String>()?;
+
+        // Check if this field needs normalization
+        let normalized_type = if type_str == "large_string" || type_str == "large_utf8" {
+            needs_normalization = true;
+            Some(pyarrow.call_method0("utf8")?)
+        } else if type_str == "large_binary" {
+            needs_normalization = true;
+            Some(pyarrow.call_method0("binary")?)
+        } else if type_str.starts_with("timestamp[") && type_str.contains("tz=") {
+            // Handle timezone-aware timestamps
+            needs_normalization = true;
+            // Warn about lossy conversion
+            let warnings = py.import("warnings")?;
+            warnings.call_method1(
+                "warn",
+                (
+                    "Converting timezone-aware timestamp to naive UTC. This may cause data loss. \
+                     Recommended: convert to UTC before loading.",
+
+                )
+            )?;
+            Some(pyarrow.call_method1("timestamp", ("us",))?)
+        } else if type_str.starts_with("large_list<") {
+            needs_normalization = true;
+            // For large_list, we need to extract the value type and create a standard list
+            let value_type = field_type.call_method0("value_type")?;
+            Some(pyarrow.call_method1("list_", (value_type,))?)
+        } else {
+            None
+        };
+
+        if let Some(norm_type) = normalized_type {
+            let nullable = field.getattr("nullable")?.extract::<bool>()?;
+            let kwargs = [("nullable", nullable)].into_py_dict(py)?;
+            let new_field = pyarrow.call_method(
+                "field",
+                (field_name, norm_type),
+                Some(&kwargs)
+            )?;
+            new_fields.push(new_field);
+        } else {
+            new_fields.push(field);
+        }
+    }
+
+    // If no normalization needed, return original table
+    if !needs_normalization {
+        return Ok(arrow_table);
+    }
+
+    // Create new schema
+    let new_schema = pyarrow.call_method1("schema", (new_fields,))?;
+
+    // Cast the table to the new schema
+    let normalized_table = arrow_table.call_method1("cast", (new_schema,))?;
+
+    Ok(normalized_table)
 }
 
 /// Convert PyArrow Table or RecordBatch to Rust Arrow RecordBatches

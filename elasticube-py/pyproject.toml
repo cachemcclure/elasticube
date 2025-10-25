@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "elasticube"
-version = "1.0.2"
-description = "High-performance OLAP cube library with Rust backend"
+version = "1.1.0"
+description = "High-performance OLAP cube library with Rust backend, featuring native DataFrame support, streaming data loading, and dynamic aggregations"
 readme = "README.md"
 authors = [
     { name = "Cache McClure", email = "cache.mcclure@gmail.com" }
@@ -69,3 +69,8 @@ all = [
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "elasticube._elasticube"
+
+[dependency-groups]
+dev = [
+    "psutil>=7.1.0",
+]

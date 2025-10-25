@@ -41,7 +41,7 @@ add_serialization_methods(ElastiCube)
 # Enable Jupyter integration if available
 _jupyter_enabled = enable_jupyter_integration()
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 __all__ = [
     "ElastiCubeBuilder",
     "ElastiCube",
@@ -49,3 +49,6 @@ __all__ = [
     "CubeVisualizer",
     "CubeSerializer",
 ]
+
+# Streaming utilities are available as a submodule
+# Import with: from elasticube.streaming import load_polars_chunked, ...

@@ -1,6 +1,6 @@
 [package]
 name = "elasticube-core"
-version = "1.0.2"
+version = "1.1.0"
 edition = "2021"
 authors = ["Cache McClure <cache.mcclure@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -8,7 +8,7 @@ repository = "https://github.com/cachemcclure/elasticube"
 homepage = "https://github.com/cachemcclure/elasticube"
 documentation = "https://docs.rs/elasticube-core"
 readme = "../README.md"
-description = "High-performance OLAP cube builder and query library"
+description = "High-performance embeddable OLAP cube library built on Apache Arrow and DataFusion, with support for dynamic aggregations, calculated fields, and incremental updates"
 keywords = ["olap", "analytics", "cube", "arrow", "datafusion"]
 categories = ["database", "data-structures"]
 

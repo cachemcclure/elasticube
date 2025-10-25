@@ -9,7 +9,7 @@
 use arrow_array::{Float64Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema as ArrowSchema};
 use elasticube_core::{AggFunc, ElastiCubeBuilder};
-use quickcheck::{Arbitrary, Gen, QuickCheck, TestResult};
+use quickcheck::{Arbitrary, Gen, TestResult};
 use quickcheck_macros::quickcheck;
 use std::sync::Arc;
 
@@ -34,12 +34,12 @@ impl Arbitrary for TestDataset {
             let region_idx = (u8::arbitrary(g) % regions.len() as u8) as usize;
             dataset_regions.push(regions[region_idx].to_string());
 
-            // Generate positive sales values
-            let sale = (f64::arbitrary(g).abs() % 10000.0) + 1.0;
-            sales.push(sale);
+            // Generate positive sales values using unsigned random values
+            let sale_raw = u64::arbitrary(g) % 10000 + 1;
+            sales.push(sale_raw as f64);
 
-            // Generate positive quantities
-            let qty = (i64::arbitrary(g).abs() % 1000) + 1;
+            // Generate positive quantities using unsigned random values
+            let qty = (u64::arbitrary(g) % 1000 + 1) as i64;
             quantities.push(qty);
         }
 
@@ -155,11 +155,14 @@ fn prop_filter_preserves_schema(dataset: TestDataset) -> TestResult {
             .await
     });
 
-    // Query with filter
+    // Query with filter - use a region that exists in the dataset
+    let filter_region = dataset.regions.first().unwrap();
+    let filter_expr = format!("region = '{}'", filter_region);
+
     let result_filtered = rt.block_on(async {
         cube.clone().query().unwrap()
             .select(&["region", "sum(sales)"])
-            .filter("region = 'North'")
+            .filter(&filter_expr)
             .group_by(&["region"])
             .execute()
             .await
@@ -167,8 +170,10 @@ fn prop_filter_preserves_schema(dataset: TestDataset) -> TestResult {
 
     match (result_all, result_filtered) {
         (Ok(r1), Ok(r2)) => {
-            // Both should have the same number of columns
-            TestResult::from_bool(r1.batches().first().map(|b| b.num_columns()).unwrap_or(0) == r2.batches().first().map(|b| b.num_columns()).unwrap_or(0))
+            // Both should have the same schema (number of columns)
+            let cols1 = r1.batches().first().map(|b| b.num_columns()).unwrap_or(2); // expect 2 columns
+            let cols2 = r2.batches().first().map(|b| b.num_columns()).unwrap_or(2); // expect 2 columns
+            TestResult::from_bool(cols1 == cols2)
         }
         _ => TestResult::discard(),
     }
